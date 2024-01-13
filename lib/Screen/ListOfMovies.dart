@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart'; // Import Get
 import '../API/CallApi.dart';
 import '../Models/Movies.dart';
 import 'AllListMovies.dart';
@@ -10,9 +11,7 @@ class ListOfMovies extends StatefulWidget {
 }
 
 class _ListOfMoviesState extends State<ListOfMovies> {
-  List<Movies> allMovies = [];
-  List<Movies> favoriteMovies = [];
-  Movies? selectedFavorite;
+  final MovieController moviesController = Get.put(MovieController()); // Create an instance of MoviesController
 
   @override
   void initState() {
@@ -22,9 +21,7 @@ class _ListOfMoviesState extends State<ListOfMovies> {
 
   Future<void> fetchMovies() async {
     List<Movies> movies = await getAllMovies();
-    setState(() {
-      allMovies = movies;
-    });
+    moviesController.setAllMovies(movies); // Use GetX controller to set allMovies
   }
 
   @override
@@ -43,20 +40,21 @@ class _ListOfMoviesState extends State<ListOfMovies> {
           children: [
             Expanded(
               flex: 1,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: allMovies.length,
-                itemBuilder: (context, index) {
-                  return MovieCard(
-                    movie: allMovies[index],
-                    favoriteMovies: favoriteMovies,
-                    onFavoriteChanged: () {
-                      setState(() {
-                        updateFavorites(allMovies[index]);
-                      });
-                    },
-                  );
-                },
+              child: Obx(
+                    () => ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: moviesController.allMovies.length,
+                  itemBuilder: (context, index) {
+                    return MovieCard(
+                      movie: moviesController.allMovies[index],
+                      onFavoriteChanged: () {
+                        moviesController.updateFavorites(moviesController.allMovies[index]);
+                      },
+                      moviesController: moviesController,
+
+                    );
+                  },
+                ),
               ),
             ),
             SizedBox(height: 10),
@@ -91,12 +89,7 @@ class _ListOfMoviesState extends State<ListOfMovies> {
                           ),
                           TextButton(
                             onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => AllMovies(),
-                                ),
-                              );
+                              Get.to(AllMovies());
                             },
                             child: Text(
                               'View All',
@@ -110,19 +103,20 @@ class _ListOfMoviesState extends State<ListOfMovies> {
                       ),
                     ),
                     Expanded(
-                      child: ListView.builder(
-                        itemCount: favoriteMovies.length,
-                        itemBuilder: (context, index) {
-                          return MovieCard(
-                            movie: favoriteMovies[index],
-                            favoriteMovies: favoriteMovies,
-                            onFavoriteChanged: () {
-                              setState(() {
-                                updateFavorites(favoriteMovies[index]);
-                              });
-                            },
-                          );
-                        },
+                      child: Obx(
+                            () => ListView.builder(
+                          itemCount: moviesController.favoriteMovies.length,
+                          itemBuilder: (context, index) {
+                            return MovieCard(
+                              movie: moviesController.favoriteMovies[index],
+                              onFavoriteChanged: () {
+                                moviesController.updateFavorites(
+                                    moviesController.favoriteMovies[index]);
+                              }, moviesController: moviesController,
+
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ],
@@ -130,54 +124,40 @@ class _ListOfMoviesState extends State<ListOfMovies> {
               ),
             ),
             SizedBox(height: 10),
-            selectedFavorite != null
-                ? Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Selected Favorite Movie',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 5),
-                  MovieCard(movie: selectedFavorite!, favoriteMovies: [], onFavoriteChanged: () {}),
-                ],
-              ),
-            )
-                : SizedBox.shrink(),
           ],
         ),
       ),
     );
   }
+}
+
+// MoviesController class for state management
+class MovieController extends GetxController {
+  RxList<Movies> allMovies = <Movies>[].obs;
+  RxList<Movies> favoriteMovies = <Movies>[].obs;
+
+  void setAllMovies(List<Movies> movies) {
+    allMovies.assignAll(movies);
+  }
 
   void updateFavorites(Movies movie) {
     if (favoriteMovies.contains(movie)) {
       favoriteMovies.remove(movie);
-      selectedFavorite = null;
     } else {
       favoriteMovies.add(movie);
-      selectedFavorite = movie;
     }
   }
 }
 
 class MovieCard extends StatefulWidget {
   final Movies movie;
-  final List<Movies> favoriteMovies;
   final VoidCallback onFavoriteChanged;
+  final MovieController moviesController;
 
   const MovieCard({
     required this.movie,
-    required this.favoriteMovies,
     required this.onFavoriteChanged,
+    required this.moviesController,
   });
 
   @override
@@ -185,9 +165,18 @@ class MovieCard extends StatefulWidget {
 }
 
 class _MovieCardState extends State<MovieCard> {
+  bool isFavorite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    isFavorite = widget.moviesController.favoriteMovies.contains(widget.movie);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
+      height: 300,
       margin: EdgeInsets.all(10),
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -196,10 +185,13 @@ class _MovieCardState extends State<MovieCard> {
             Expanded(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
-                child: Image.network(
+                child: widget.movie.posterPath != null &&
+                    widget.movie.posterPath!.isNotEmpty
+                    ? Image.network(
                   'https://image.tmdb.org/t/p/w500${widget.movie.posterPath}',
                   fit: BoxFit.cover,
-                ),
+                )
+                    : Placeholder(),
               ),
             ),
             Padding(
@@ -217,13 +209,16 @@ class _MovieCardState extends State<MovieCard> {
                       ),
                       IconButton(
                         icon: Icon(
-                          widget.favoriteMovies.contains(widget.movie)
+                          isFavorite
                               ? Icons.favorite
                               : Icons.favorite_border,
                           color: Colors.red,
                         ),
                         onPressed: () {
                           widget.onFavoriteChanged();
+                          setState(() {
+                            isFavorite = !isFavorite;
+                          });
                         },
                       ),
                     ],
@@ -237,6 +232,9 @@ class _MovieCardState extends State<MovieCard> {
     );
   }
 }
+
+
+
 
 Future<List<Movies>> getAllMovies() async {
   List<Movies> allMovies = [];

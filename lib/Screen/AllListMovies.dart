@@ -1,8 +1,7 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
-
+import 'package:get/get.dart'; // Import Get
 import '../API/CallApi.dart';
 import '../Models/Movies.dart';
 
@@ -14,8 +13,8 @@ class AllMovies extends StatefulWidget {
 }
 
 class _AllMoviesState extends State<AllMovies> {
-  List<Movies> allMovies = [];
-  bool isLoading = true;
+  // Declare a controller for state management
+  final MoviesController moviesController = Get.put(MoviesController());
 
   @override
   void initState() {
@@ -40,15 +39,17 @@ class _AllMoviesState extends State<AllMovies> {
           },
         ),
       ),
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : Container(
-        padding: EdgeInsets.all(10),
-        child: ListView.builder(
-          itemCount: allMovies.length,
-          itemBuilder: (context, index) {
-            return buildCustomMovieCard(allMovies[index]);
-          },
+      body: Obx(
+            () => moviesController.isLoading.value
+            ? Center(child: CircularProgressIndicator())
+            : Container(
+          padding: EdgeInsets.all(10),
+          child: ListView.builder(
+            itemCount: moviesController.allMovies.length,
+            itemBuilder: (context, index) {
+              return buildCustomMovieCard(moviesController.allMovies[index]);
+            },
+          ),
         ),
       ),
     );
@@ -89,7 +90,7 @@ class _AllMoviesState extends State<AllMovies> {
           ),
           SizedBox(height: 5),
           RatingBar.builder(
-            initialRating: movie.rating / 2, // Assuming rating is out of 10
+            initialRating: movie.rating / 2,
             itemCount: 5,
             itemSize: 18,
             allowHalfRating: true,
@@ -97,8 +98,7 @@ class _AllMoviesState extends State<AllMovies> {
               Icons.star,
               color: Colors.amber,
             ),
-            onRatingUpdate:
-                (rating) {}, // Implement rating update logic if needed
+            onRatingUpdate: (rating) {},
           ),
           SizedBox(height: 5),
           Text(
@@ -126,6 +126,8 @@ class _AllMoviesState extends State<AllMovies> {
 
   Future<void> getAllMovies() async {
     try {
+      moviesController.setLoading(true); // Set loading to true
+
       final response = await CallApi().getData('discover/movie');
 
       if (response.statusCode == 200) {
@@ -137,27 +139,18 @@ class _AllMoviesState extends State<AllMovies> {
 
           print("Length: ${moviesList.length}");
 
-          setState(() {
-            allMovies = moviesList;
-            isLoading = false;
-          });
+          // Update the state using the controller
+          moviesController.setAllMovies(moviesList);
         } else {
           print("Invalid data format in the API response.");
-          setState(() {
-            isLoading = false; // Set loading to false in case of invalid data
-          });
         }
       } else {
         print("Failed to fetch data. Status code: ${response.statusCode}");
-        setState(() {
-          isLoading = false; // Set loading to false in case of API failure
-        });
       }
     } catch (e) {
       print("Exception caught: $e");
-      setState(() {
-        isLoading = false; // Set loading to false in case of an exception
-      });
+    } finally {
+      moviesController.setLoading(false); // Set loading to false after API call
     }
   }
 
@@ -191,5 +184,20 @@ class _AllMoviesState extends State<AllMovies> {
         );
       },
     );
+  }
+}
+
+// MoviesController class for state management
+class MoviesController extends GetxController {
+  RxList<Movies> allMovies = <Movies>[].obs;
+  RxBool isLoading = true.obs;
+
+  void setAllMovies(List<Movies> movies) {
+    allMovies.assignAll(movies);
+  }
+
+
+  void setLoading(bool value) {
+    isLoading.value = value;
   }
 }
